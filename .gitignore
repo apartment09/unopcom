@@ -1,0 +1,11 @@
+node_modules/
+db/unopcom.sqlite
+db/unopcom.sqlite-shm
+db/unopcom.sqlite-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.env
+xcom/
+node_modules.*
+.claude/

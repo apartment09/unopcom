@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>UNOPCOM</title>
+  <meta name="theme-color" content="#26a6de">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────────────────── -->
+  <header id="header">
+    <div class="header-left">
+      <div class="logo">
+        <span class="logo-un">UN</span><span class="logo-op">OP</span><span class="logo-com">COM</span>
+      </div>
+    </div>
+    <div class="header-center">
+      <span class="rank-badge" id="rank-badge">ROOKIE</span>
+    </div>
+    <div class="header-right">
+      <div class="header-stat">
+        <span class="header-stat-value" id="streak-display">0</span>
+        <span class="header-stat-label">STREAK</span>
+      </div>
+      <div class="header-stat credits">
+        <span class="header-stat-value" id="credits-display">0</span>
+        <span class="header-stat-label">CREDITS</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Next Deadline ───────────────────────────────────────────── -->
+  <div id="deadline-bar">
+    <div class="deadline-inner">
+      <div class="deadline-timer on-time" id="deadline-timer">--:--:--</div>
+      <div class="deadline-label" id="deadline-label">NO ACTIVE MISSIONS</div>
+    </div>
+    <div class="deadline-corner tl"></div>
+    <div class="deadline-corner br"></div>
+  </div>
+
+  <!-- ── Invasion Meter ─────────────────────────────────────────── -->
+  <div id="invasion-bar">
+    <div class="invasion-label">THREAT</div>
+    <div class="invasion-track">
+      <div class="invasion-fill" id="invasion-fill"></div>
+    </div>
+    <div class="invasion-value" id="invasion-value">15%</div>
+    <div class="threat-name" id="threat-name">Minimal</div>
+  </div>
+
+  <!-- ── Tab Bar ────────────────────────────────────────────────── -->
+  <nav id="tab-bar">
+    <button class="tab active" data-tab="dashboard">HQ</button>
+    <button class="tab" data-tab="missions">MISSIONS</button>
+    <button class="tab" data-tab="map">MAP</button>
+    <button class="tab" data-tab="base">BASE</button>
+    <button class="tab" data-tab="barracks">BARRACKS</button>
+    <button class="tab" data-tab="research">RESEARCH</button>
+    <button class="tab" data-tab="story">STORY</button>
+    <button class="tab" data-tab="achievements">MEDALS</button>
+    <button class="tab" data-tab="log">LOG</button>
+  </nav>
+
+  <!-- ── Dashboard ──────────────────────────────────────────────── -->
+  <main id="tab-dashboard" class="tab-content active">
+    <!-- Campaign stats bar -->
+    <div class="campaign-bar" id="campaign-bar"></div>
+    <div class="territory-summary" id="territory-summary"></div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="stat-active">0</div>
+        <div class="stat-label">Active</div>
+      </div>
+      <div class="stat-card alert">
+        <div class="stat-value" id="stat-overtime">0</div>
+        <div class="stat-label">Overtime</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-completed">0</div>
+        <div class="stat-label">Completed</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-soldiers">0</div>
+        <div class="stat-label">Soldiers</div>
+      </div>
+    </div>
+
+    <div class="rank-progress-section">
+      <div class="rank-progress-label">
+        <span id="current-rank">Rookie</span>
+        <span id="next-rank"></span>
+      </div>
+      <div class="rank-progress-track">
+        <div class="rank-progress-fill" id="rank-progress-fill"></div>
+      </div>
+    </div>
+
+    <div class="panel-header">ACTIVE BONUSES</div>
+    <div class="bonuses-list" id="bonuses-list"></div>
+
+    <div class="panel-header" style="margin-top: 1rem;">REQUISITIONS</div>
+    <div class="shop-grid">
+      <button class="shop-btn" data-item="recruit">
+        <span class="shop-icon">&#9651;</span>
+        <span class="shop-label">Recruit</span>
+        <span class="shop-price">100 CR</span>
+      </button>
+      <button class="shop-btn" data-item="heal">
+        <span class="shop-icon">&#9670;</span>
+        <span class="shop-label">Heal</span>
+        <span class="shop-price">50 CR</span>
+      </button>
+      <button class="shop-btn" data-item="intel">
+        <span class="shop-icon">&#9673;</span>
+        <span class="shop-label">Intel</span>
+        <span class="shop-price">75 CR</span>
+      </button>
+    </div>
+
+    <div class="panel-header" style="margin-top: 1.2rem;">ACTIVE MISSIONS</div>
+    <div id="dashboard-tasks"></div>
+  </main>
+
+  <!-- ── Missions ───────────────────────────────────────────────── -->
+  <main id="tab-missions" class="tab-content">
+    <button class="btn-primary" id="btn-new-mission">+ DEPLOY MISSION</button>
+
+    <div class="filter-row">
+      <button class="filter-btn active" data-filter="active">Active</button>
+      <button class="filter-btn" data-filter="completed">Done</button>
+      <button class="filter-btn" data-filter="abandoned">Failed</button>
+      <button class="filter-btn" data-filter="">All</button>
+    </div>
+
+    <div id="mission-list"></div>
+  </main>
+
+  <!-- ── Map ─────────────────────────────────────────────────────── -->
+  <main id="tab-map" class="tab-content">
+    <div class="panel-header">GEOSCAPE</div>
+    <div class="map-legend">
+      <span class="legend-item"><span class="legend-dot xcom"></span>UN</span>
+      <span class="legend-item"><span class="legend-dot fortified"></span>Fortified</span>
+      <span class="legend-item"><span class="legend-dot contested"></span>Under Attack</span>
+      <span class="legend-item"><span class="legend-dot liberating"></span>Liberating</span>
+      <span class="legend-item"><span class="legend-dot alien"></span>Alien</span>
+    </div>
+    <div class="map-container" id="map-container"></div>
+    <div class="territory-detail" id="territory-detail"></div>
+  </main>
+
+  <!-- ── Base ────────────────────────────────────────────────────── -->
+  <main id="tab-base" class="tab-content">
+    <div class="panel-header">BASE LAYOUT</div>
+    <div class="base-grid" id="base-grid"></div>
+  </main>
+
+  <!-- ── Research ───────────────────────────────────────────────── -->
+  <main id="tab-research" class="tab-content">
+    <div class="panel-header">RESEARCH TREE</div>
+    <div class="research-req" id="research-req"></div>
+    <div class="research-tree" id="research-tree"></div>
+  </main>
+
+  <!-- ── Barracks ───────────────────────────────────────────────── -->
+  <main id="tab-barracks" class="tab-content">
+    <div class="panel-header">SOLDIER ROSTER</div>
+    <div id="soldier-list"></div>
+    <div id="memorial-section"></div>
+  </main>
+
+  <!-- ── Story ───────────────────────────────────────────────────── -->
+  <main id="tab-story" class="tab-content">
+    <div class="panel-header">PERSONNEL FILES</div>
+    <div id="story-overview"></div>
+    <div id="story-detail"></div>
+
+  </main>
+
+  <!-- ── Achievements ────────────────────────────────────────────── -->
+  <main id="tab-achievements" class="tab-content">
+    <div class="panel-header">MEDALS &amp; COMMENDATIONS</div>
+    <div class="achievement-counter" id="achievement-counter"></div>
+    <div id="achievement-full-gallery"></div>
+  </main>
+
+  <!-- ── Event Log ──────────────────────────────────────────────── -->
+  <main id="tab-log" class="tab-content">
+    <div class="panel-header">SITUATION REPORT</div>
+    <div id="event-list"></div>
+  </main>
+
+  <!-- ── New Mission Modal ──────────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-new-mission">
+    <div class="modal">
+      <div class="modal-title">MISSION BRIEFING</div>
+      <div class="modal-stripe"></div>
+      <form id="form-new-mission">
+        <label>Mission Title
+          <input type="text" id="input-title" required autocomplete="off">
+        </label>
+        <label>Description
+          <textarea id="input-desc" rows="2"></textarea>
+        </label>
+        <label>Priority
+          <select id="input-priority">
+            <option value="1">Trivial</option>
+            <option value="2" selected>Moderate</option>
+            <option value="3">Critical</option>
+            <option value="4">Terror</option>
+          </select>
+        </label>
+        <label>Category
+          <select id="input-category">
+            <option value="combat">Combat</option>
+            <option value="research">Research</option>
+            <option value="engineering">Engineering</option>
+            <option value="recon">Recon</option>
+          </select>
+        </label>
+        <label>Deploy To
+          <select id="input-territory">
+            <option value="">— No territory —</option>
+          </select>
+        </label>
+        <label>Time Estimate
+          <input type="text" id="input-duration" placeholder="e.g. 2h 30m, 45m, 1d 4h" autocomplete="off" value="2h" required>
+        </label>
+        <div class="duration-picker">
+          <button type="button" class="dur-btn" data-val="30m">30m</button>
+          <button type="button" class="dur-btn" data-val="1h">1h</button>
+          <button type="button" class="dur-btn" data-val="2h">2h</button>
+          <button type="button" class="dur-btn" data-val="4h">4h</button>
+          <button type="button" class="dur-btn" data-val="8h">8h</button>
+          <button type="button" class="dur-btn" data-val="1d">1d</button>
+          <button type="button" class="dur-btn" data-val="2d">2d</button>
+          <button type="button" class="dur-btn" data-val="1w">1w</button>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-cancel" id="btn-cancel-mission">ABORT</button>
+          <button type="submit" class="btn-primary">DEPLOY</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Debrief Modal ──────────────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-debrief">
+    <div class="modal debrief">
+      <div class="modal-title">MISSION DEBRIEF</div>
+      <div class="modal-stripe"></div>
+      <div id="debrief-content"></div>
+      <button class="btn-primary" id="btn-close-debrief">DISMISSED</button>
+    </div>
+  </div>
+
+  <!-- ── Confirm Modal ───────────────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-confirm">
+    <div class="modal confirm-modal">
+      <div class="modal-title" id="confirm-title">CONFIRM</div>
+      <div class="modal-stripe"></div>
+      <div class="confirm-body" id="confirm-body"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="confirm-cancel">CANCEL</button>
+        <button class="btn-primary" id="confirm-ok">CONFIRM</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Toast Container ────────────────────────────────────────── -->
+  <div id="toast-container"></div>
+
+  <!-- ── Game Over Overlay ────────────────────────────────────────── -->
+  <div id="game-over" class="game-over-overlay">
+    <div class="game-over-content">
+      <div class="game-over-title">EARTH HAS FALLEN</div>
+      <div class="game-over-stripe"></div>
+      <div class="game-over-stats" id="game-over-stats"></div>
+      <div class="game-over-fallen" id="game-over-fallen"></div>
+      <button class="btn-primary" id="btn-new-campaign">NEW CAMPAIGN</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

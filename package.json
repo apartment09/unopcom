@@ -1,0 +1,15 @@
+{
+  "name": "unopcom",
+  "version": "1.0.0",
+  "description": "Gamified task management in the X-COM universe",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "sprites": "node scripts/generate-sprites.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "express": "^5.0.0",
+    "pngjs": "^7.0.0"
+  }
+}
