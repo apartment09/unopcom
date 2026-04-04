@@ -19,6 +19,7 @@ const ALIENS_BY_PRIORITY = {
 let currentFilter = 'active';
 let gameState = {};
 let cachedTasks = [];  // cached for client-side timer updates
+const _phaseHistory = new Map(); // taskId → last-seen phase (for notification transitions)
 
 // ── API ──────────────────────────────────────────────────────────────
 
@@ -40,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initShop();
   initGameOver();
   initKeyboard();
+  initNotifications();
   refresh();
   setInterval(tickTimers, 1000);
   setInterval(refresh, 60000);
@@ -107,6 +109,31 @@ function getTimerState(task) {
   return { phase, remainingSec, ratio };
 }
 
+// ── Notifications ─────────────────────────────────────────────────────
+
+function initNotifications() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+function _fireNotification(task, phase) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const PRIORITY_NAMES = { 1: 'Trivial', 2: 'Moderate', 3: 'Critical', 4: 'Terror' };
+  const pri = PRIORITY_NAMES[task.priority] || '';
+  if (phase === 'overdue') {
+    new Notification(`⚠ MISSION OVERDUE — ${task.title}`, {
+      body: `${pri} priority. Soldier at risk of injury. Complete now.`,
+      tag: `task-${task.id}-overdue`,
+    });
+  } else if (phase === 'critical') {
+    new Notification(`✗ CRITICAL OVERDUE — ${task.title}`, {
+      body: `${pri} priority. Soldier KIA imminent. Complete immediately.`,
+      tag: `task-${task.id}-critical`,
+    });
+  }
+}
+
 // ── Client-side timer tick (every second) ────────────────────────────
 
 function tickTimers() {
@@ -126,6 +153,16 @@ function tickTimers() {
     if (card) {
       card.classList.remove('ot-grace', 'ot-overdue', 'ot-critical');
       if (state.phase !== 'on_time') card.classList.add(`ot-${state.phase}`);
+    }
+
+    // Fire notification on phase transitions into overdue / critical
+    const prev = _phaseHistory.get(taskId);
+    if (prev !== state.phase) {
+      _phaseHistory.set(taskId, state.phase);
+      if ((state.phase === 'overdue' || state.phase === 'critical') &&
+          prev !== undefined) {  // prev undefined = first render, don't notify
+        _fireNotification(task, state.phase);
+      }
     }
   });
 
@@ -329,7 +366,14 @@ async function renderTaskList(containerId, status, compact) {
   const el = document.getElementById(containerId);
 
   // Cache active tasks for client-side timer ticking
-  if (status === 'active') cachedTasks = tasks;
+  if (status === 'active') {
+    cachedTasks = tasks;
+    // Prune phase history for tasks no longer active
+    const activeIds = new Set(tasks.map(t => t.id));
+    for (const id of _phaseHistory.keys()) {
+      if (!activeIds.has(id)) _phaseHistory.delete(id);
+    }
+  }
 
   if (!tasks.length) {
     el.innerHTML = `<div class="empty-state">${status === 'active' ? 'No active missions. Deploy one!' : 'No missions found.'}</div>`;
