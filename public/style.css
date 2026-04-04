@@ -668,6 +668,21 @@ body::after {
 
 /* ── Filter Row ───────────────────────────────────────────────────── */
 
+.field-guide {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  margin: 0.6rem 0 0;
+  letter-spacing: 0.3px;
+}
+.fg-phase {
+  font-weight: 700;
+  font-family: var(--font);
+}
+.fg-phase.on_time { color: var(--green); }
+.fg-phase.grace    { color: var(--gold); }
+.fg-phase.overdue  { color: var(--orange); }
+.fg-phase.critical { color: var(--red); }
+
 .filter-row {
   display: flex;
   gap: 0.4rem;
@@ -871,6 +886,20 @@ body::after {
 }
 
 .debrief #btn-close-debrief { margin-top: 1rem; }
+.debrief-reaction {
+  margin: 0.3rem 0;
+  font-size: 0.9rem;
+  color: var(--text);
+  font-style: italic;
+  padding: 0.3rem 0.5rem;
+}
+.debrief-reaction-name {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--text-bright);
+  font-size: 0.8rem;
+  letter-spacing: 0.5px;
+}
 
 /* ── Soldier Cards ────────────────────────────────────────────────── */
 
@@ -1775,7 +1804,15 @@ body::after {
   border-left-color: var(--red-dim);
   opacity: 0.5;
 }
-.chapter-item.locked { opacity: 0.25; }
+.chapter-item.locked { opacity: 0.4; }
+.chapter-hint {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  opacity: 0.7;
+  margin-left: auto;
+  letter-spacing: 0.5px;
+  font-style: italic;
+}
 
 .chapter-num {
   font-family: var(--font);

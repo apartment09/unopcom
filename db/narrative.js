@@ -341,8 +341,9 @@ module.exports = {
         }
 
         case 'chance':
-          // Random chance per evaluation (for small moments)
-          unlocked = Math.random() < (condition.probability || 0.15);
+          // Only roll every 5 missions to prevent clustering or permanent miss
+          unlocked = soldier.missions > 0 && soldier.missions % 5 === 0
+            && Math.random() < (condition.probability || 0.15);
           break;
 
         case 'manual':
@@ -524,16 +525,39 @@ module.exports = {
         .all(soldierId).map(r => r.chapter_id)
     );
 
-    const chapters = allChapters.map(ch => ({
-      id: ch.id,
-      num: ch.chapter_num,
-      tier: ch.tier,
-      title: unlockedIds.has(ch.id) || lostIds.has(ch.id) ? ch.title : '???',
-      content: unlockedIds.has(ch.id) ? ch.content : null,
-      state: unlockedIds.has(ch.id) ? 'unlocked' : lostIds.has(ch.id) ? 'lost' : 'locked',
-      is_achievement: ch.is_achievement,
-      achievement_name: ch.achievement_name,
-    }));
+    const chapters = allChapters.map(ch => {
+      const state = unlockedIds.has(ch.id) ? 'unlocked' : lostIds.has(ch.id) ? 'lost' : 'locked';
+      let unlock_hint = null;
+      if (state === 'locked') {
+        try {
+          const cond = JSON.parse(ch.unlock_value || '{}');
+          switch (ch.unlock_type) {
+            case 'missions':   unlock_hint = `${cond.min || 1} missions`; break;
+            case 'rank':       unlock_hint = `rank ${cond.min || 1}`; break;
+            case 'streak':     unlock_hint = `${cond.min || 3}-day streak or ${(cond.min || 3) * 4} missions`; break;
+            case 'time':       unlock_hint = `${cond.min_days || 1} days served`; break;
+            case 'relationship': {
+              const partner = db.prepare("SELECT ct.callsign FROM character_templates ct WHERE ct.id = ?").get(cond.template_id);
+              unlock_hint = partner ? `Requires ${partner.callsign} in squad` : 'Requires a specific squadmate'; break;
+            }
+            case 'chance':     unlock_hint = 'Discovered through field experience'; break;
+            case 'manual':     unlock_hint = null; break;
+            default:           unlock_hint = null;
+          }
+        } catch (_) {}
+      }
+      return {
+        id: ch.id,
+        num: ch.chapter_num,
+        tier: ch.tier,
+        title: state !== 'locked' ? ch.title : '???',
+        content: state === 'unlocked' ? ch.content : null,
+        state,
+        is_achievement: ch.is_achievement,
+        achievement_name: ch.achievement_name,
+        unlock_hint,
+      };
+    });
 
     // Relationships
     const rels = this.getSoldierRelationships(soldierId);

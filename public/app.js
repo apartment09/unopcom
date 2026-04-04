@@ -558,6 +558,12 @@ function showDebrief(r) {
         </div>`;
     }
   }
+  if (r.reactions?.length) {
+    html += `<div class="debrief-intel-header">\u25A0 FROM THE BARRACKS</div>`;
+    for (const rx of r.reactions) {
+      html += `<div class="debrief-reaction"><span class="debrief-reaction-name">${esc(rx.name)}</span> \u2014 \u201C${esc(rx.text)}\u201D</div>`;
+    }
+  }
   html += '</div>';
 
   document.getElementById('debrief-content').innerHTML = html;
@@ -1200,6 +1206,7 @@ async function updateSoldiers() {
 // ── Story Tab ────────────────────────────────────────────────────────
 
 let storyDetailSoldierId = null;
+let _profileCache = null; // cached for readChapter to avoid re-fetch
 
 function markStoryRead(totalUnlocked) {
   localStorage.setItem('story_seen_count', totalUnlocked);
@@ -1262,6 +1269,7 @@ function openSoldierProfile(id) {
 
 function closeProfile() {
   storyDetailSoldierId = null;
+  _profileCache = null;
   document.getElementById('story-detail').innerHTML = '';
   updateStory();
 }
@@ -1269,6 +1277,7 @@ function closeProfile() {
 async function renderSoldierProfile(soldierId) {
   const profile = await api(`/game/soldier/${soldierId}/profile`);
   if (!profile) { closeProfile(); return; }
+  _profileCache = profile;
 
   const overview = document.getElementById('story-overview');
   const detail = document.getElementById('story-detail');
@@ -1329,11 +1338,13 @@ async function renderSoldierProfile(soldierId) {
     const clickHandler = ch.state === 'unlocked' ? `onclick="readChapter(${profile.id}, ${ch.id})"` : '';
     const achieveIcon = ch.is_achievement ? '<span class="chapter-achievement">\u2605</span>' : '';
     const lostLabel = ch.state === 'lost' ? ' [LOST]' : '';
+    const hintEl = ch.state === 'locked' && ch.unlock_hint
+      ? `<span class="chapter-hint">${esc(ch.unlock_hint)}</span>` : '';
     html += `
       <div class="chapter-item ${stateClass}" ${clickHandler}>
         <span class="chapter-num">#${ch.num}</span>
         <span class="chapter-title">${esc(ch.title)}${lostLabel}</span>
-        ${achieveIcon}
+        ${achieveIcon}${hintEl}
       </div>`;
   }
   html += '</div>';
@@ -1343,7 +1354,9 @@ async function renderSoldierProfile(soldierId) {
 }
 
 async function readChapter(soldierId, chapterId) {
-  const profile = await api(`/game/soldier/${soldierId}/profile`);
+  const profile = (_profileCache?.id === soldierId)
+    ? _profileCache
+    : await api(`/game/soldier/${soldierId}/profile`);
   const ch = profile.chapters.find(c => c.id === chapterId);
   if (!ch || ch.state !== 'unlocked') return;
 

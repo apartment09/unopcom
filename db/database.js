@@ -529,7 +529,7 @@ module.exports = {
     });
 
     // Narrative: generate reactions
-    narrative.generateReactions('mission_complete', { name: task.title });
+    const reactions = narrative.generateReactions('mission_complete', { name: task.title });
 
     return {
       task: this.getTask(id),
@@ -547,6 +547,7 @@ module.exports = {
       research_unlocked: newResearch,
       territory: territoryResult,
       story_unlocks: storyUnlocks,
+      reactions: reactions.map(r => ({ name: r.soldier.nickname || r.soldier.name, text: r.text })),
     };
   },
 
