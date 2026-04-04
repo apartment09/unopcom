@@ -503,9 +503,15 @@ function showDebrief(r) {
     }
   }
   if (r.story_unlocks?.length) {
+    html += `<div class="debrief-intel-header">\u25A0 INTEL RECOVERED</div>`;
     for (const ch of r.story_unlocks) {
       const icon = ch.is_achievement ? '\u2605' : '\u25B6';
-      html += `<div class="debrief-line" style="color:var(--cyan)">${icon} New chapter: ${ch.title}</div>`;
+      const label = ch.is_achievement ? 'Achievement' : `${ch.character_name || 'Personnel'} \u2014 Chapter ${ch.chapter_num}`;
+      html += `
+        <div class="debrief-intel-card">
+          <div class="debrief-intel-label">${icon} ${label}</div>
+          <div class="debrief-intel-title">${esc(ch.title)}</div>
+        </div>`;
     }
   }
   html += '</div>';
@@ -1151,6 +1157,18 @@ async function updateSoldiers() {
 
 let storyDetailSoldierId = null;
 
+function markStoryRead(totalUnlocked) {
+  localStorage.setItem('story_seen_count', totalUnlocked);
+  document.querySelector('[data-tab="story"]')?.classList.remove('has-badge');
+}
+
+function checkStoryBadge(progress) {
+  const total = progress.reduce((sum, s) => sum + (s.unlocked || 0), 0);
+  const seen = parseInt(localStorage.getItem('story_seen_count') || '0', 10);
+  const btn = document.querySelector('[data-tab="story"]');
+  if (btn) btn.classList.toggle('has-badge', total > seen);
+}
+
 async function updateStory() {
   if (storyDetailSoldierId) {
     await renderSoldierProfile(storyDetailSoldierId);
@@ -1158,6 +1176,7 @@ async function updateStory() {
   }
 
   const progress = await api('/game/story/progress');
+  checkStoryBadge(progress);
   const overview = document.getElementById('story-overview');
   const detail = document.getElementById('story-detail');
   detail.innerHTML = '';
@@ -1184,6 +1203,10 @@ async function updateStory() {
           </div>
         </div>`;
     }).join('');
+
+    // Mark all as read when overview is shown
+    const total = progress.reduce((sum, s) => sum + (s.unlocked || 0), 0);
+    markStoryRead(total);
   }
 
 }

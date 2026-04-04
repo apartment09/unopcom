@@ -369,12 +369,12 @@ module.exports = {
 
   /** Evaluate unlocks for ALL active soldiers */
   evaluateAllUnlocks(context = {}) {
-    const soldiers = db.prepare("SELECT id FROM soldiers WHERE status != 'kia' AND template_id IS NOT NULL").all();
+    const soldiers = db.prepare("SELECT s.id, s.template_id, ct.callsign FROM soldiers s LEFT JOIN character_templates ct ON s.template_id = ct.id WHERE s.status != 'kia' AND s.template_id IS NOT NULL").all();
     const allNew = [];
     for (const s of soldiers) {
       const newChs = this.evaluateUnlocks(s.id, context);
       for (const ch of newChs) {
-        allNew.push({ soldier_id: s.id, ...ch });
+        allNew.push({ soldier_id: s.id, character_name: s.callsign, ...ch });
       }
     }
     return allNew;

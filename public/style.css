@@ -335,6 +335,18 @@ body::after {
 }
 .tab:hover { color: var(--text); }
 
+.tab.has-badge::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 6px var(--cyan);
+}
+
 /* ── Tab Content ──────────────────────────────────────────────────── */
 
 .tab-content {
@@ -828,6 +840,35 @@ body::after {
 .debrief-line.bad  { color: var(--red); }
 .debrief-line.gold { color: var(--gold); }
 .debrief-line.warn { color: var(--orange); }
+
+.debrief-intel-header {
+  margin-top: 1rem;
+  padding: 0.3rem 0 0.3rem 0;
+  font-size: 0.7rem;
+  letter-spacing: 3px;
+  color: var(--cyan);
+  border-top: 1px solid rgba(74, 234, 220, 0.3);
+  border-bottom: 1px solid rgba(74, 234, 220, 0.3);
+  text-align: center;
+}
+.debrief-intel-card {
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.7rem;
+  background: rgba(74, 234, 220, 0.06);
+  border-left: 2px solid var(--cyan);
+}
+.debrief-intel-label {
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+  color: var(--cyan);
+  opacity: 0.7;
+  margin-bottom: 0.15rem;
+}
+.debrief-intel-title {
+  font-size: 1rem;
+  color: var(--cyan);
+  font-weight: 700;
+}
 
 .debrief #btn-close-debrief { margin-top: 1rem; }
 
