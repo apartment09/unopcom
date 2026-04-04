@@ -134,16 +134,16 @@ const BASE_ROOMS = [
   { id: 'vault',    name: 'Vault',            cost: 350, desc: 'Secure storage. +15% credits from all missions.',       row: 2, col: 2, requires: 'workshop' },
 ];
 
-// Research tree — streak milestones
+// Research tree — streak milestones (missions is the alternative unlock path)
 const RESEARCH_TREE = [
-  { id: 'laser',     name: 'Laser Weapons',      streak: 3,  desc: 'Basic energy weapons research complete.' },
-  { id: 'alloys',    name: 'Alien Alloys',        streak: 5,  desc: 'Alien materials can now be studied.' },
-  { id: 'plasma',    name: 'Plasma Weapons',      streak: 7,  desc: 'Advanced plasma technology unlocked.' },
-  { id: 'medkit',    name: 'Advanced Medkit',      streak: 10, desc: 'Improved field medicine. Wounded heal faster.' },
-  { id: 'armor',     name: 'Titan Armor',         streak: 14, desc: 'Heavy armor plating. Soldiers are tougher.' },
-  { id: 'psionics',  name: 'Psionics',            streak: 21, desc: 'Mind powers unlocked. The aliens fear you.' },
-  { id: 'hyperwave', name: 'Hyperwave Decoder',   streak: 30, desc: 'Full alien comm intercept. Total intelligence.' },
-  { id: 'fusion',    name: 'Fusion Defense',       streak: 45, desc: 'Ultimate defense technology. Earth is safe.' },
+  { id: 'laser',     name: 'Laser Weapons',      streak: 3,  missions: 15,  desc: 'Basic energy weapons research complete.' },
+  { id: 'alloys',    name: 'Alien Alloys',        streak: 5,  missions: 25,  desc: 'Alien materials can now be studied.' },
+  { id: 'plasma',    name: 'Plasma Weapons',      streak: 7,  missions: 35,  desc: 'Advanced plasma technology unlocked.' },
+  { id: 'medkit',    name: 'Advanced Medkit',      streak: 10, missions: 50,  desc: 'Improved field medicine. Wounded heal faster.' },
+  { id: 'armor',     name: 'Titan Armor',         streak: 14, missions: 70,  desc: 'Heavy armor plating. Soldiers are tougher.' },
+  { id: 'psionics',  name: 'Psionics',            streak: 21, missions: 100, desc: 'Mind powers unlocked. The aliens fear you.' },
+  { id: 'hyperwave', name: 'Hyperwave Decoder',   streak: 30, missions: 150, desc: 'Full alien comm intercept. Total intelligence.' },
+  { id: 'fusion',    name: 'Fusion Defense',       streak: 45, missions: 225, desc: 'Ultimate defense technology. Earth is safe.' },
 ];
 
 // Territory definitions
@@ -919,10 +919,11 @@ module.exports = {
   getResearch() {
     const unlocked = db.prepare('SELECT id FROM research').all().map(r => r.id);
     const state = db.prepare('SELECT * FROM game_state WHERE id = 1').get();
+    const totalMissions = db.prepare("SELECT COUNT(*) as c FROM tasks WHERE status = 'completed'").get().c;
     return RESEARCH_TREE.map(tech => ({
       ...tech,
       unlocked: unlocked.includes(tech.id),
-      available: state.streak_days >= tech.streak && !unlocked.includes(tech.id)
+      available: (state.streak_days >= tech.streak || totalMissions >= tech.missions) && !unlocked.includes(tech.id)
     }));
   },
 
@@ -930,11 +931,12 @@ module.exports = {
     if (!this.hasRoom('lab')) return [];  // need lab to unlock research
 
     const state = db.prepare('SELECT * FROM game_state WHERE id = 1').get();
+    const totalMissions = db.prepare("SELECT COUNT(*) as c FROM tasks WHERE status = 'completed'").get().c;
     const unlocked = db.prepare('SELECT id FROM research').all().map(r => r.id);
     const newUnlocks = [];
 
     for (const tech of RESEARCH_TREE) {
-      if (state.streak_days >= tech.streak && !unlocked.includes(tech.id)) {
+      if ((state.streak_days >= tech.streak || totalMissions >= tech.missions) && !unlocked.includes(tech.id)) {
         db.prepare('INSERT OR IGNORE INTO research (id) VALUES (?)').run(tech.id);
         db.prepare('INSERT INTO events (type, title, detail) VALUES (?, ?, ?)')
           .run('research', `Research Complete: ${tech.name}`, tech.desc);

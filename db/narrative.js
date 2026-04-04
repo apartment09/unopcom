@@ -331,11 +331,14 @@ module.exports = {
           unlocked = daysSince >= (condition.min_days || 1);
           break;
 
-        case 'streak':
-          // Current streak meets threshold
+        case 'streak': {
+          // Unlock if current streak meets threshold OR soldier has enough missions
           const state = db.prepare('SELECT streak_days FROM game_state WHERE id = 1').get();
-          unlocked = (state?.streak_days || 0) >= (condition.min || 3);
+          const minStreak = condition.min || 3;
+          const minMissions = condition.min_missions || minStreak * 4;
+          unlocked = (state?.streak_days || 0) >= minStreak || soldier.missions >= minMissions;
           break;
+        }
 
         case 'chance':
           // Random chance per evaluation (for small moments)

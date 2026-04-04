@@ -1053,7 +1053,7 @@ async function updateResearch() {
     reqEl.textContent = 'Research Lab required. Build it in the BASE tab to unlock the tech tree.';
   } else {
     reqEl.className = 'research-req';
-    reqEl.textContent = `Research Lab online. Current streak: ${gameState.streak_days} days.`;
+    reqEl.textContent = `Research Lab online. Streak: ${gameState.streak_days}d — or complete enough total missions to unlock via field experience.`;
   }
 
   const el = document.getElementById('research-tree');
@@ -1078,7 +1078,7 @@ async function updateResearch() {
     return `
       ${connector}
       <div class="research-node ${stateClass}">
-        <div class="research-streak">${tech.streak}d</div>
+        <div class="research-streak">${tech.streak}d<span class="research-or">or</span>${tech.missions}m</div>
         <div class="research-info">
           <div class="research-name">${tech.name}</div>
           <div class="research-desc">${tech.desc}</div>
