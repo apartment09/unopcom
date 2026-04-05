@@ -81,6 +81,9 @@ db.exec(`
 // Migrations
 try { db.exec("ALTER TABLE tasks ADD COLUMN territory_id TEXT DEFAULT NULL"); } catch(e) {}
 try { db.exec("ALTER TABLE territories ADD COLUMN contested_by TEXT DEFAULT NULL"); } catch(e) {}
+try { db.exec("ALTER TABLE tasks ADD COLUMN type TEXT DEFAULT 'mission'"); } catch(e) {}
+try { db.exec("ALTER TABLE tasks ADD COLUMN hold_streak INTEGER DEFAULT 0"); } catch(e) {}
+try { db.exec("ALTER TABLE game_state ADD COLUMN iron_will_charges INTEGER DEFAULT 0"); } catch(e) {}
 
 // Seed territories if empty
 const terCount = db.prepare('SELECT COUNT(*) as c FROM territories').get().c;
@@ -123,6 +126,7 @@ const SHOP = {
   recruit:     100,   // new soldier
   heal:        50,    // heal wounded soldier
   intel:       75,    // reduce threat by 10
+  iron_will:   150,   // absorb one Hold Directive breach without penalty
 };
 
 // Base rooms — id, name, cost, description, grid position, requires (dependency)
@@ -304,10 +308,11 @@ module.exports = {
     return t;
   },
 
-  createTask({ title, description, priority, category, duration_minutes, territory_id }) {
+  createTask({ title, description, priority, category, duration_minutes, territory_id, type }) {
+    const taskType = type === 'resistance' ? 'resistance' : 'mission';
     const result = db.prepare(
-      'INSERT INTO tasks (title, description, priority, category, duration_minutes, territory_id) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(title, description || '', priority || 2, category || 'combat', duration_minutes, territory_id || null);
+      'INSERT INTO tasks (title, description, priority, category, duration_minutes, territory_id, type) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(title, description || '', priority || 2, category || 'combat', duration_minutes, territory_id || null, taskType);
     return this.getTask(result.lastInsertRowid);
   },
 
@@ -627,6 +632,90 @@ module.exports = {
     return { task: this.getTask(id), credits_reversed: awarded, invasion_increase: reduction, soldier_restored: soldierRestored };
   },
 
+  // ── Breach a Hold Directive ──────────────────────────────────────
+
+  breachDirective(id) {
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
+    if (!task || task.type !== 'resistance' || task.status !== 'active') return null;
+
+    const state = db.prepare('SELECT * FROM game_state WHERE id = 1').get();
+
+    // Iron Will: absorb the breach, preserve streak
+    if ((state.iron_will_charges || 0) > 0) {
+      db.prepare('UPDATE game_state SET iron_will_charges = iron_will_charges - 1 WHERE id = 1').run();
+      db.prepare("UPDATE tasks SET created_at = datetime('now') WHERE id = ?").run(id);
+      db.prepare('INSERT INTO events (type, title, detail) VALUES (?, ?, ?)')
+        .run('resistance_breach', `Iron Will Absorbed: ${task.title}`, 'Streak preserved — timer reset');
+      return { task: this.getTask(id), iron_will_used: true, hold_streak: task.hold_streak || 0 };
+    }
+
+    // Penalties: invasion up, soldier wounded, streak reset
+    const priority = task.priority || 2;
+    const invasionIncrease = { 1: 5, 2: 10, 3: 15, 4: 20 }[priority] || 10;
+    const newInvasion = Math.min(100, state.invasion_meter + invasionIncrease);
+
+    db.prepare('UPDATE game_state SET invasion_meter = ? WHERE id = 1').run(newInvasion);
+    db.prepare("UPDATE tasks SET created_at = datetime('now'), hold_streak = 0 WHERE id = ?").run(id);
+
+    const soldierResult = this._woundSoldier(task.title);
+
+    db.prepare('INSERT INTO events (type, title, detail) VALUES (?, ?, ?)')
+      .run('resistance_breach', `Perimeter Compromised: ${task.title}`, `Threat +${invasionIncrease} | Streak lost`);
+
+    const reactions = narrative.generateReactions('mission_fail', { name: task.title });
+
+    return {
+      task: this.getTask(id),
+      invasion_increase: invasionIncrease,
+      hold_streak_lost: task.hold_streak || 0,
+      soldier_wounded: soldierResult,
+      iron_will_used: false,
+      reactions: reactions.map(r => ({ name: r.soldier.nickname || r.soldier.name, text: r.text })),
+    };
+  },
+
+  // ── Auto-resolve Hold Directives past their deadline ─────────────
+
+  resolveHoldDirectives() {
+    const now = Date.now();
+    const directives = db.prepare("SELECT * FROM tasks WHERE type = 'resistance' AND status = 'active'").all();
+
+    for (const task of directives) {
+      const elapsed = (now - new Date(task.created_at + 'Z').getTime()) / 60000;
+      if (elapsed < task.duration_minutes) continue;
+
+      const streak = (task.hold_streak || 0) + 1;
+      const priority = task.priority || 2;
+      const base = CREDITS_BY_PRIORITY[priority] || 25;
+
+      // Escalating rewards by streak
+      let mult = 1.0;
+      if (streak >= 30) mult = 2.0;
+      else if (streak >= 14) mult = 1.75;
+      else if (streak >= 7) mult = 1.5;
+      else if (streak >= 3) mult = 1.25;
+
+      const earned = Math.round(base * mult);
+      const reduction = Math.round((INVASION_REDUCTION[priority] || 6) * Math.min(mult, 1.5));
+
+      const state = db.prepare('SELECT invasion_meter FROM game_state WHERE id = 1').get();
+      const newInvasion = Math.max(0, state.invasion_meter - reduction);
+
+      db.prepare('UPDATE game_state SET credits = credits + ?, credits_earned = credits_earned + ?, invasion_meter = ? WHERE id = 1')
+        .run(earned, earned, newInvasion);
+
+      // Reset timer, increment streak — task stays active
+      db.prepare("UPDATE tasks SET created_at = datetime('now'), hold_streak = ? WHERE id = ?").run(streak, task.id);
+
+      // Passive soldier XP for holding the line
+      this._promoteSoldier(1);
+
+      db.prepare('INSERT INTO events (type, title, detail) VALUES (?, ?, ?)')
+        .run('resistance_held', `Perimeter Held: ${task.title}`,
+          `+${earned} CR | Streak ${streak} | Threat -${reduction}${mult > 1 ? ` | x${mult} bonus` : ''}`);
+    }
+  },
+
   // ── Soldier effects (internal) ───────────────────────────────────
 
   _noSoldierPenalty(missionTitle, severity) {
@@ -727,6 +816,12 @@ module.exports = {
       result = { message: 'Council bribed. Threat -10', reduction: 10 };
       db.prepare('INSERT INTO events (type, title, detail) VALUES (?, ?, ?)')
         .run('shop', 'Council Bribed: Threat -10', `-${price} CR`);
+    } else if (item === 'iron_will') {
+      db.prepare('UPDATE game_state SET iron_will_charges = iron_will_charges + 1 WHERE id = 1').run();
+      const newCharges = (state.iron_will_charges || 0) + 1;
+      result = { message: `Iron Will acquired — ${newCharges} charge${newCharges !== 1 ? 's' : ''} held`, charges: newCharges };
+      db.prepare('INSERT INTO events (type, title, detail) VALUES (?, ?, ?)')
+        .run('shop', 'Iron Will acquired', `-${price} CR | Breach protection stored`);
     }
 
     db.prepare('UPDATE game_state SET credits = credits - ? WHERE id = 1').run(price);
@@ -863,6 +958,9 @@ module.exports = {
 
     // Territory tick: alien expansion, contested timeout, terror missions
     this.tickTerritories(hoursPassed);
+
+    // Auto-resolve any Hold Directives that have elapsed
+    this.resolveHoldDirectives();
   },
 
   // ── Base ──────────────────────────────────────────────────────────

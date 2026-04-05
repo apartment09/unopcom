@@ -139,6 +139,22 @@ function _fireNotification(task, phase) {
 // ── Client-side timer tick (every second) ────────────────────────────
 
 function tickTimers() {
+  // Hold directive countdown timers
+  document.querySelectorAll('[data-hold-timer]').forEach(el => {
+    const taskId = parseInt(el.dataset.holdTimer);
+    const task = cachedTasks.find(t => t.id === taskId);
+    if (!task) return;
+    const deadline = new Date(task.created_at + 'Z').getTime() + task.duration_minutes * 60000;
+    const remaining = deadline - Date.now();
+    const remainingSec = Math.round(remaining / 1000);
+    if (remaining <= 0) {
+      el.textContent = 'SUCCESS PENDING';
+      el.className = 'hold-timer success-pending';
+    } else {
+      el.textContent = formatCountdown(remainingSec);
+    }
+  });
+
   // Update per-card timers
   document.querySelectorAll('[data-task-timer]').forEach(el => {
     const taskId = parseInt(el.dataset.taskTimer);
@@ -175,7 +191,7 @@ function tickTimers() {
 function tickDeadline() {
   const timerEl = document.getElementById('deadline-timer');
   const labelEl = document.getElementById('deadline-label');
-  const active = cachedTasks.filter(t => t.status === 'active');
+  const active = cachedTasks.filter(t => t.status === 'active' && t.type !== 'resistance');
 
   if (!active.length) {
     timerEl.textContent = '--:--:--';
@@ -363,6 +379,18 @@ function updateDashboard() {
     bonusEl.innerHTML = '<div class="bonuses-empty">No active bonuses. Build facilities and maintain streaks.</div>';
   }
 
+  // Iron Will charges display
+  const iwChargesEl = document.getElementById('iron-will-charges');
+  const charges = gameState.iron_will_charges || 0;
+  if (iwChargesEl) {
+    if (charges > 0) {
+      iwChargesEl.textContent = `${charges} held`;
+      iwChargesEl.style.display = '';
+    } else {
+      iwChargesEl.style.display = 'none';
+    }
+  }
+
   // Territory summary
   const ts = gameState.territory_stats || {};
   const terSummary = document.getElementById('territory-summary');
@@ -398,6 +426,43 @@ async function renderTaskList(containerId, status, compact) {
   }
 
   el.innerHTML = tasks.map(t => {
+    // ── Hold Directive card ─────────────────────────────────────────
+    if (t.type === 'resistance') {
+      const deadline = new Date(t.created_at + 'Z').getTime() + t.duration_minutes * 60000;
+      const remaining = deadline - Date.now();
+      const remainingSec = Math.round(remaining / 1000);
+      const streak = t.hold_streak || 0;
+
+      const streakHtml = streak > 0
+        ? `<span class="hold-streak">\u29BF ${streak} day${streak !== 1 ? 's' : ''}</span>` : '';
+
+      const timerHtml = remaining <= 0
+        ? `<span class="hold-timer success-pending">SUCCESS PENDING</span>`
+        : `<span class="hold-timer" data-hold-timer="${t.id}">${formatCountdown(remainingSec)}</span>`;
+
+      const actions = compact ? '' : `<div class="mission-actions">
+        <button class="btn-icon" onclick="editMission(${t.id})" title="Edit">\u270E</button>
+        <button class="btn-icon" onclick="deleteMission(${t.id})" title="Remove">\u2421</button>
+        <button class="btn-icon danger" onclick="breachDirective(${t.id})" title="Log Breach">\u26A0</button>
+      </div>`;
+
+      return `
+        <div class="mission-card type-resistance priority-${t.priority} status-${t.status}">
+          <div class="resistance-shield">\u25C8</div>
+          <div class="mission-body">
+            <div class="mission-title">${esc(t.title)}</div>
+            ${t.description ? `<div class="mission-desc">${esc(t.description)}</div>` : ''}
+            <div class="mission-meta">
+              <span class="mission-tag hold-directive-tag">HOLD DIRECTIVE</span>
+              ${streakHtml}
+              ${timerHtml}
+            </div>
+          </div>
+          ${actions}
+        </div>`;
+    }
+
+    // ── Standard mission card ───────────────────────────────────────
     const timer = getTimerState(t);
     const otClass = (timer && timer.phase !== 'on_time') ? `ot-${timer.phase}` : '';
     const classes = [
@@ -422,7 +487,6 @@ async function renderTaskList(containerId, status, compact) {
       }
     }
 
-    // Live countdown timer
     if (t.status === 'active' && timer) {
       meta += `<span class="mission-timer ${timer.phase}" data-task-timer="${t.id}">${formatCountdown(timer.remainingSec)}</span>`;
     }
@@ -653,12 +717,86 @@ async function abandonMission(id) {
   refresh();
 }
 
+// ── Breach Hold Directive ─────────────────────────────────────────────
+
+async function breachDirective(id) {
+  const task = cachedTasks.find(t => t.id === id);
+  const streak = task?.hold_streak || 0;
+  const streakWarn = streak > 0
+    ? `<div class="confirm-warn">${streak} day streak will be lost.</div>` : '';
+
+  const ok = await showConfirm(
+    'LOG BREACH',
+    `Admit failure on "${esc(task?.title || 'directive')}"?<div class="confirm-warn">Threat increase. Soldier at risk of injury.</div>${streakWarn}`,
+    'BREACH', true
+  );
+  if (!ok) return;
+
+  const result = await api(`/tasks/${id}/breach`, { method: 'POST' });
+  if (result.error) { toast(result.error, 'error'); return; }
+
+  showBreachReport(result);
+  refresh();
+}
+
+function showBreachReport(r) {
+  const modal = document.getElementById('modal-debrief');
+  let html = '<div class="debrief-details">';
+
+  if (r.iron_will_used) {
+    html += `<div class="debrief-line gold">\u29BF Iron Will absorbed the breach!</div>`;
+    html += `<div class="debrief-line good">Streak preserved: ${r.hold_streak} day${r.hold_streak !== 1 ? 's' : ''}. Timer reset.</div>`;
+  } else {
+    html += `<div class="debrief-line bad">\u2717 Perimeter compromised: ${esc(r.task?.title || '')}</div>`;
+    html += `<div class="debrief-line bad">\u25B2 Threat +${r.invasion_increase}</div>`;
+    if (r.hold_streak_lost > 0) {
+      html += `<div class="debrief-line bad">\u29BF ${r.hold_streak_lost} day streak lost</div>`;
+    }
+    if (r.soldier_wounded) {
+      html += `<div class="debrief-line bad">\u26A0 ${r.soldier_wounded.nickname || r.soldier_wounded.name} wounded</div>`;
+    }
+    html += `<div class="debrief-line">Directive reset. Hold the line next cycle.</div>`;
+    if (r.reactions?.length) {
+      html += `<div class="debrief-intel-header">\u25A0 FROM THE BARRACKS</div>`;
+      for (const rx of r.reactions) {
+        html += `<div class="debrief-reaction"><span class="debrief-reaction-name">${esc(rx.name)}</span> \u2014 \u201C${esc(rx.text)}\u201D</div>`;
+      }
+    }
+  }
+
+  html += '</div>';
+  document.getElementById('debrief-content').innerHTML = html;
+  modal.querySelector('.modal-title').textContent = r.iron_will_used ? 'IRON WILL' : 'BREACH REPORT';
+  const panel = modal.querySelector('.debrief');
+  panel.classList.remove('animate-in');
+  modal.classList.add('open');
+  requestAnimationFrame(() => panel.classList.add('animate-in'));
+  document.getElementById('btn-close-debrief').onclick = () => {
+    modal.querySelector('.modal-title').textContent = 'MISSION DEBRIEF';
+    modal.classList.remove('open');
+  };
+}
+
 // ── New Mission Form ─────────────────────────────────────────────────
 
 function initMissionForm() {
   const modal = document.getElementById('modal-new-mission');
   const form = document.getElementById('form-new-mission');
   const durInput = document.getElementById('input-duration');
+  const typeInput = document.getElementById('input-type');
+  const typeBtns = document.querySelectorAll('.type-btn');
+
+  // Type toggle
+  typeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      typeBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      typeInput.value = btn.dataset.type;
+      const isResistance = btn.dataset.type === 'resistance';
+      modal.querySelector('.modal-title').textContent = isResistance ? 'HOLD DIRECTIVE' : 'MISSION BRIEFING';
+      form.querySelector('.btn-primary').textContent = isResistance ? 'ACTIVATE' : 'DEPLOY';
+    });
+  });
 
   document.getElementById('btn-new-mission').addEventListener('click', () => {
     modal.classList.add('open');
@@ -681,7 +819,6 @@ function initMissionForm() {
     }
   });
 
-  // Duration quick-pick buttons fill the text input
   document.querySelectorAll('.dur-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       durInput.value = btn.dataset.val;
@@ -689,7 +826,6 @@ function initMissionForm() {
     });
   });
 
-  // Clear validation error as user types
   durInput.addEventListener('input', () => durInput.setCustomValidity(''));
 
   form.addEventListener('submit', async (e) => {
@@ -708,7 +844,8 @@ function initMissionForm() {
       priority: parseInt(document.getElementById('input-priority').value),
       category: document.getElementById('input-category').value,
       duration_minutes: duration,
-      territory_id: document.getElementById('input-territory').value || null
+      territory_id: document.getElementById('input-territory').value || null,
+      type: typeInput.value || 'mission',
     };
     if (!data.title) return;
 
@@ -733,6 +870,10 @@ function initMissionForm() {
 
 function resetFormMode() {
   editingTaskId = null;
+  const typeBtns = document.querySelectorAll('.type-btn');
+  typeBtns.forEach(b => b.classList.remove('active'));
+  document.querySelector('.type-btn[data-type="mission"]').classList.add('active');
+  document.getElementById('input-type').value = 'mission';
   document.querySelector('#modal-new-mission .modal-title').textContent = 'MISSION BRIEFING';
   document.querySelector('#form-new-mission .btn-primary').textContent = 'DEPLOY';
 }

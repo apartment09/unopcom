@@ -13,10 +13,10 @@ router.get('/:id', (req, res) => {
 });
 
 router.post('/', (req, res) => {
-  const { title, description, priority, category, duration_minutes, territory_id } = req.body;
+  const { title, description, priority, category, duration_minutes, territory_id, type } = req.body;
   if (!title?.trim()) return res.status(400).json({ error: 'Title required' });
   if (!duration_minutes || duration_minutes < 1) return res.status(400).json({ error: 'Duration required' });
-  const task = db.createTask({ title: title.trim(), description, priority, category, duration_minutes, territory_id });
+  const task = db.createTask({ title: title.trim(), description, priority, category, duration_minutes, territory_id, type });
   res.status(201).json(task);
 });
 
@@ -27,8 +27,16 @@ router.patch('/:id', (req, res) => {
 });
 
 router.post('/:id/complete', (req, res) => {
+  const task = db.getTask(req.params.id);
+  if (task?.type === 'resistance') return res.status(400).json({ error: 'Hold Directives cannot be completed — use /breach to log a failure.' });
   const result = db.completeTask(req.params.id);
   if (!result) return res.status(400).json({ error: 'Task not active' });
+  res.json(result);
+});
+
+router.post('/:id/breach', (req, res) => {
+  const result = db.breachDirective(req.params.id);
+  if (!result) return res.status(400).json({ error: 'Not a Hold Directive or not active' });
   res.json(result);
 });
 

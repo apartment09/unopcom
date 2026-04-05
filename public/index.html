@@ -127,6 +127,12 @@
         <span class="shop-label">Intel</span>
         <span class="shop-price">75 CR</span>
       </button>
+      <button class="shop-btn" data-item="iron_will">
+        <span class="shop-icon">&#11043;</span>
+        <span class="shop-label">Iron Will</span>
+        <span class="shop-price">150 CR</span>
+        <span class="iron-will-charges" id="iron-will-charges" style="display:none"></span>
+      </button>
     </div>
 
     <div class="panel-header" style="margin-top: 1.2rem;">ACTIVE MISSIONS</div>
@@ -218,6 +224,11 @@
       <div class="modal-title">MISSION BRIEFING</div>
       <div class="modal-stripe"></div>
       <form id="form-new-mission">
+        <div class="mission-type-toggle">
+          <button type="button" class="type-btn active" data-type="mission">MISSION</button>
+          <button type="button" class="type-btn" data-type="resistance">HOLD DIRECTIVE</button>
+        </div>
+        <input type="hidden" id="input-type" value="mission">
         <label>Mission Title
           <input type="text" id="input-title" required autocomplete="off">
         </label>
