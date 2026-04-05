@@ -40,6 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initFilters();
   initShop();
   initGameOver();
+  initRestartCampaign();
   initKeyboard();
   initNotifications();
   refresh();
@@ -289,6 +290,19 @@ function initGameOver() {
     if (!ok) return;
     await api('/game/reset', { method: 'POST' });
     document.getElementById('game-over').classList.remove('active');
+    refresh();
+  });
+}
+
+function initRestartCampaign() {
+  document.getElementById('btn-restart-campaign').addEventListener('click', async () => {
+    const ok = await showConfirm(
+      'RESTART CAMPAIGN',
+      'Abort this campaign and start over?<div class="confirm-warn">All tasks, soldiers, credits, research, and base progress will be permanently erased.</div>',
+      'RESTART', true
+    );
+    if (!ok) return;
+    await api('/game/reset', { method: 'POST' });
     refresh();
   });
 }

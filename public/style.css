@@ -666,6 +666,34 @@ body::after {
 }
 .btn-cancel:hover { border-color: var(--text-dim); color: var(--text); }
 
+/* ── Restart Campaign ─────────────────────────────────────────────── */
+
+.restart-campaign-section {
+  margin-top: 2rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--border);
+}
+
+.btn-restart-campaign {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  padding: 0.55rem 1.2rem;
+  background: transparent;
+  color: var(--red-dim);
+  border: 1px solid var(--red-dim);
+  cursor: pointer;
+  clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+  text-transform: uppercase;
+  transition: all 0.2s;
+}
+.btn-restart-campaign:hover {
+  background: rgba(214, 48, 64, 0.1);
+  color: var(--red);
+  border-color: var(--red);
+}
+
 /* ── Filter Row ───────────────────────────────────────────────────── */
 
 .field-guide {
