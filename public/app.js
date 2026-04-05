@@ -527,7 +527,7 @@ async function renderTaskList(containerId, status, compact) {
       </div>`;
       return `
         <div class="mission-card scheduled priority-${t.priority}">
-          <div class="scheduled-clock">\u23F0</div>
+          <div class="scheduled-clock"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
           <div class="mission-body">
             <div class="mission-title">${esc(t.title)}</div>
             ${t.description ? `<div class="mission-desc">${esc(t.description)}</div>` : ''}
