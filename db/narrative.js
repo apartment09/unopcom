@@ -692,3 +692,29 @@ module.exports = {
     `);
   },
 };
+
+// ── Auto-seed characters on first run ────────────────────────────────
+// If character_templates is empty (fresh DB or loader never run), seed
+// directly from the char files so the app works without a manual step.
+{
+  const templateCount = db.prepare('SELECT COUNT(*) as c FROM character_templates').get().c;
+  if (templateCount === 0) {
+    const fs = require('fs');
+    const charDir = path.join(__dirname, 'characters');
+    const files = fs.readdirSync(charDir).filter(f => f.startsWith('char-') && f.endsWith('.js'));
+    for (const file of files.sort()) {
+      const char = require(path.join(charDir, file));
+      const { template, chapters = [], reactions = [], relationships = [] } = char;
+      module.exports.registerTemplate(template);
+      for (const ch of chapters) {
+        module.exports.registerChapter({ ...ch, character_id: template.id });
+      }
+      for (const r of reactions) {
+        module.exports.registerReaction({ ...r, character_id: template.id });
+      }
+      for (const rel of relationships) {
+        module.exports.registerRelationship(rel);
+      }
+    }
+  }
+}

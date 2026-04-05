@@ -41,7 +41,11 @@ db.exec(`
     xp INTEGER DEFAULT 0,
     status TEXT DEFAULT 'active',          -- active, wounded, kia
     missions INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now')),
+    template_id TEXT DEFAULT NULL,
+    traits TEXT DEFAULT '[]',
+    personality_desc TEXT DEFAULT '',
+    cause_of_death TEXT DEFAULT NULL
   );
 
   CREATE TABLE IF NOT EXISTS events (
