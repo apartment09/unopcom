@@ -988,7 +988,7 @@ function initMissionForm() {
     const title = inp.value.trim();
     if (!title) return;
     if (editingTaskId) {
-      const s = await api(`/tasks/${editingTaskId}/subtasks`, { method: 'POST', body: JSON.stringify({ title }) });
+      const s = await api(`/tasks/${editingTaskId}/subtasks`, { method: 'POST', body: { title } });
       _editSubtasks.push(s);
     } else {
       _draftSubtasks.push({ title });
@@ -1081,7 +1081,7 @@ function initMissionForm() {
       const created = await api('/tasks', { method: 'POST', body: data });
       // Flush draft subtasks
       for (const s of _draftSubtasks) {
-        await api(`/tasks/${created.id}/subtasks`, { method: 'POST', body: JSON.stringify({ title: s.title }) });
+        await api(`/tasks/${created.id}/subtasks`, { method: 'POST', body: { title: s.title } });
       }
     }
     _draftSubtasks = [];
