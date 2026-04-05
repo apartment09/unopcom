@@ -294,6 +294,8 @@ module.exports = {
   // ── Tasks ────────────────────────────────────────────────────────
 
   getAllTasks(status) {
+    // Promote any scheduled tasks whose start time has arrived before querying
+    this.promoteScheduledTasks();
     let tasks;
     if (status === 'active') {
       // Include scheduled tasks in the active view

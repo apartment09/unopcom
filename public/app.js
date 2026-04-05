@@ -160,7 +160,16 @@ function tickTimers() {
     if (!task) return;
     const remaining = new Date(task.scheduled_start + 'Z').getTime() - Date.now();
     const remainingSec = Math.round(remaining / 1000);
-    el.textContent = remaining > 0 ? 'in ' + formatCountdown(remainingSec) : 'STARTING...';
+    if (remaining > 0) {
+      el.textContent = 'in ' + formatCountdown(remainingSec);
+    } else {
+      el.textContent = 'STARTING...';
+      // Trigger a refresh so the card transitions to active
+      if (!el.dataset.refreshPending) {
+        el.dataset.refreshPending = '1';
+        refresh();
+      }
+    }
   });
 
   // Hold directive countdown timers
