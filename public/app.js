@@ -289,6 +289,7 @@ function initGameOver() {
     );
     if (!ok) return;
     await api('/game/reset', { method: 'POST' });
+    storyDetailSoldierId = null;
     document.getElementById('game-over').classList.remove('active');
     refresh();
   });
@@ -303,6 +304,7 @@ function initRestartCampaign() {
     );
     if (!ok) return;
     await api('/game/reset', { method: 'POST' });
+    storyDetailSoldierId = null;
     refresh();
   });
 }
@@ -1290,7 +1292,7 @@ function closeProfile() {
 
 async function renderSoldierProfile(soldierId) {
   const profile = await api(`/game/soldier/${soldierId}/profile`);
-  if (!profile) { closeProfile(); return; }
+  if (!profile || profile.error) { closeProfile(); return; }
   _profileCache = profile;
 
   const overview = document.getElementById('story-overview');
