@@ -6,7 +6,7 @@ A personal productivity app skinned as an XCOM-style tactical game. Tasks are "m
 ## Stack
 - **Runtime:** Node.js + Express 5, no build step
 - **DB:** SQLite via `better-sqlite3`
-- **Frontend:** Vanilla JS SPA, single file `public/app.js` (~1580 lines), no framework
+- **Frontend:** Vanilla JS SPA, single file `public/app.js` (~2000 lines), no framework
 - **Port:** 3003
 - **Start:** `node server.js`
 - **GitHub:** https://github.com/apartment09/unopcom
@@ -26,7 +26,7 @@ public/style.css                 — All styles (~2000 lines)
 ```
 
 ## Database tables
-`tasks`, `game_state` (single row), `soldiers`, `events`, `base_rooms`, `research`, `territories`, `character_templates`, `story_chapters`, `unlocked_chapters`, `lost_chapters`, `achievements`, `character_relationships`, `reaction_templates`
+`tasks`, `subtasks`, `game_state` (single row), `soldiers`, `events`, `base_rooms`, `research`, `territories`, `character_templates`, `story_chapters`, `unlocked_chapters`, `lost_chapters`, `achievements`, `character_relationships`, `reaction_templates`
 
 **Note:** `story_chapters` is the correct table name (not `chapters`). Column is `chapter_num` (not `chapter_number`).
 
@@ -55,16 +55,33 @@ Medical Bay auto-heals wounded soldiers every 6h (2h with Adv. Medkit research).
 ## Research tree (streak OR missions to unlock)
 Laser (3d/15m) → Alloys (5d/25m) → Plasma (7d/35m) → Adv. Medkit (10d/50m) → Titan Armor (14d/70m) → Psionics (21d/100m) → Hyperwave Decoder (30d/150m) → Fusion Defense (45d/225m)
 
+## Subtasks
+Tasks (both missions and directives) support subtasks. Missions call them **Objectives**; Hold Directives call them **Protocols**. The label is purely UI — same `subtasks` table underneath.
+
+```
+POST   /tasks/:id/subtasks          — add { title }
+PATCH  /tasks/:id/subtasks/:sid     — toggle completed
+DELETE /tasks/:id/subtasks/:sid     — remove
+```
+
+`getAllTasks` and `getTask` both include a `subtasks[]` array on every task response. Subtasks are toggled inline on the mission card (optimistic update). Adding/removing in the form is real-time for edits, batched-on-submit for new tasks.
+
+## Scheduled tasks
+Tasks can have a `scheduled_start` (ISO datetime, UTC). Status starts as `scheduled`; `promoteScheduledTasks()` in the tick promotes them to `active` when `datetime(scheduled_start) <= datetime('now')`. **Note:** must wrap `scheduled_start` in `datetime()` in SQL — stored with ISO `T` separator, SQLite `datetime('now')` uses space separator; plain string comparison fails.
+
 ## API routes (key ones)
 ```
-POST /tasks              — create task
-POST /tasks/:id/complete — complete task (returns full debrief object incl. reactions, story_unlocks)
-POST /tasks/:id/reactivate — reverse a completion (restores wounded/KIA soldier)
-POST /shop/:item         — recruit / heal / intel
-POST /base/:roomId       — build room
-POST /reset              — full campaign reset
-GET  /game/soldier/:id/profile — narrative profile with chapters + unlock_hint for locked chapters
-GET  /game/research      — research tree with available flag (streak OR missions)
+POST   /tasks                       — create task
+POST   /tasks/:id/complete          — complete task (returns full debrief object incl. reactions, story_unlocks)
+POST   /tasks/:id/reactivate        — reverse a completion (restores wounded/KIA soldier)
+POST   /tasks/:id/subtasks          — add subtask/objective/protocol
+PATCH  /tasks/:id/subtasks/:sid     — toggle subtask complete
+DELETE /tasks/:id/subtasks/:sid     — remove subtask
+POST   /shop/:item                  — recruit / heal / intel / iron_will
+POST   /base/:roomId                — build room
+POST   /reset                       — full campaign reset
+GET    /game/soldier/:id/profile    — narrative profile with chapters + unlock_hint for locked chapters
+GET    /game/research               — research tree with available flag (streak OR missions)
 ```
 
 ## Debrief object shape (POST /tasks/:id/complete)
@@ -91,4 +108,4 @@ GET  /game/research      — research tree with available flag (streak OR missio
 - Research tree is linear (no branching)
 - No UI to manually trigger `manual` unlock-type chapters
 - Antarctica liberation has no dedicated UI callout
-- No PWA / service worker (next major milestone: Hetzner deployment)
+- No Web Push notifications (service worker + VAPID — deferred, requires HTTPS)
