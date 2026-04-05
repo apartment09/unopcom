@@ -335,8 +335,16 @@ body::after {
 }
 .tab:hover { color: var(--text); }
 
-/* Lucide icons hidden on desktop, shown on mobile via media query */
-.tab i { display: none; }
+/* Tab inner layout */
+.tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+/* Lucide SVGs hidden on desktop, shown on mobile via media query */
+.tab svg { display: none; }
 
 .tab.has-badge::before {
   content: '';
@@ -2106,7 +2114,7 @@ body::after {
     letter-spacing: 0;
   }
   .tab-label { display: none; }
-  .tab i { display: block; width: 18px; height: 18px; margin: 0 auto; }
+  .tab svg { display: block; width: 18px; height: 18px; }
 
   /* Mission cards */
   .mission-card { padding: 0.6rem 0.6rem; gap: 0.5rem; }
