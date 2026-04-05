@@ -35,6 +35,7 @@ async function api(path, opts = {}) {
 // ── Init ─────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
+  lucide.createIcons();
   initTabs();
   initMissionForm();
   initFilters();

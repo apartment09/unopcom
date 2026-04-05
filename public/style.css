@@ -335,6 +335,9 @@ body::after {
 }
 .tab:hover { color: var(--text); }
 
+/* Lucide icons hidden on desktop, shown on mobile via media query */
+.tab i { display: none; }
+
 .tab.has-badge::before {
   content: '';
   position: absolute;
@@ -2096,18 +2099,14 @@ body::after {
 
   /* Tab bar: icon-only mode */
   .tab {
-    font-size: 0;         /* hide text */
-    letter-spacing: 0;
     padding: 0.55rem 0;
     width: 44px;
     flex: 0 0 44px;
-  }
-  .tab::before {
-    content: attr(data-icon);
-    font-size: 1.2rem;
+    font-size: 0;
     letter-spacing: 0;
-    display: block;
   }
+  .tab-label { display: none; }
+  .tab i { display: block; width: 18px; height: 18px; margin: 0 auto; }
 
   /* Mission cards */
   .mission-card { padding: 0.6rem 0.6rem; gap: 0.5rem; }
