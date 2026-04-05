@@ -458,16 +458,17 @@ function renderSubtaskList(task) {
 }
 
 async function toggleSubtask(taskId, subtaskId) {
-  const el = document.getElementById(`subtask-${subtaskId}`);
-  if (el) {
-    const nowDone = !el.classList.contains('done');
+  // Same subtask appears in both dashboard and missions list — update all instances
+  const els = document.querySelectorAll(`[id="subtask-${subtaskId}"]`);
+  let nowDone;
+  els.forEach(el => {
+    nowDone = !el.classList.contains('done');
     el.classList.toggle('done', nowDone);
     const btn = el.querySelector('.subtask-check');
     if (btn) {
       btn.innerHTML = nowDone ? '&#10003;' : '';
       btn.title = nowDone ? 'Mark incomplete' : 'Mark complete';
     }
-    // Update progress counter
     const list = el.closest('.subtask-list');
     if (list) {
       const all = list.querySelectorAll('.subtask-item').length;
@@ -475,9 +476,8 @@ async function toggleSubtask(taskId, subtaskId) {
       const counter = list.querySelector('.subtask-progress');
       if (counter) counter.textContent = `${done}/${all}`;
     }
-  }
+  });
   await api(`/tasks/${taskId}/subtasks/${subtaskId}`, { method: 'PATCH' });
-  // Update cachedTasks so timer tick stays consistent
   const task = cachedTasks.find(t => t.id === taskId);
   if (task) {
     const sub = task.subtasks?.find(s => s.id === subtaskId);
