@@ -984,7 +984,7 @@ module.exports = {
 
   promoteScheduledTasks() {
     const due = db.prepare(
-      "SELECT * FROM tasks WHERE status = 'scheduled' AND scheduled_start <= datetime('now')"
+      "SELECT * FROM tasks WHERE status = 'scheduled' AND datetime(scheduled_start) <= datetime('now')"
     ).all();
     for (const task of due) {
       db.prepare(
