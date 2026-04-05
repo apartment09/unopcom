@@ -256,8 +256,17 @@
             <option value="">— No territory —</option>
           </select>
         </label>
-        <label>Time Estimate
-          <input type="text" id="input-duration" placeholder="e.g. 2h 30m, 45m, 1d 4h" autocomplete="off" value="2h" required>
+        <div class="schedule-row">
+          <label class="schedule-label">Start
+            <input type="datetime-local" id="input-start">
+          </label>
+          <label class="schedule-label">End
+            <input type="datetime-local" id="input-end">
+          </label>
+        </div>
+        <div class="schedule-hint" id="schedule-hint"></div>
+        <label id="duration-label">Duration <span class="duration-or">(or set End above)</span>
+          <input type="text" id="input-duration" placeholder="e.g. 2h 30m, 45m, 1d 4h" autocomplete="off" value="2h">
         </label>
         <div class="duration-picker">
           <button type="button" class="dur-btn" data-val="30m">30m</button>

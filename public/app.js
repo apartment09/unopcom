@@ -74,6 +74,18 @@ function parseDuration(input) {
 
 // ── Countdown formatting ─────────────────────────────────────────────
 
+function formatDurationLabel(minutes) {
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (minutes >= 1440) {
+    const d = Math.floor(minutes / 1440);
+    const rem = minutes % 1440;
+    return rem === 0 ? `${d}d` : `${d}d ${Math.floor(rem / 60)}h`;
+  }
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
 function formatCountdown(totalSeconds) {
   const abs = Math.abs(totalSeconds);
   const s = Math.floor(abs % 60);
@@ -139,6 +151,16 @@ function _fireNotification(task, phase) {
 // ── Client-side timer tick (every second) ────────────────────────────
 
 function tickTimers() {
+  // Scheduled task "starts in" timers
+  document.querySelectorAll('[data-scheduled-timer]').forEach(el => {
+    const taskId = parseInt(el.dataset.scheduledTimer);
+    const task = cachedTasks.find(t => t.id === taskId);
+    if (!task) return;
+    const remaining = new Date(task.scheduled_start + 'Z').getTime() - Date.now();
+    const remainingSec = Math.round(remaining / 1000);
+    el.textContent = remaining > 0 ? 'in ' + formatCountdown(remainingSec) : 'STARTING...';
+  });
+
   // Hold directive countdown timers
   document.querySelectorAll('[data-hold-timer]').forEach(el => {
     const taskId = parseInt(el.dataset.holdTimer);
@@ -426,6 +448,43 @@ async function renderTaskList(containerId, status, compact) {
   }
 
   el.innerHTML = tasks.map(t => {
+    // ── Scheduled task card ─────────────────────────────────────────
+    if (t.status === 'scheduled') {
+      const startMs = new Date(t.scheduled_start + 'Z').getTime();
+      const remaining = startMs - Date.now();
+      const remainingSec = Math.round(remaining / 1000);
+      const startLabel = new Date(t.scheduled_start + 'Z').toLocaleString([], {
+        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+      });
+      const endMs = startMs + t.duration_minutes * 60000;
+      const endLabel = new Date(endMs).toLocaleString([], {
+        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+      });
+      const durLabel = formatDurationLabel(t.duration_minutes);
+      const typeTag = t.type === 'resistance'
+        ? '<span class="mission-tag hold-directive-tag">HOLD DIRECTIVE</span>'
+        : `<span class="mission-tag">${CATEGORY_ICONS[t.category] || ''} ${t.category}</span>`;
+      const actions = compact ? '' : `<div class="mission-actions">
+        <button class="btn-icon" onclick="editMission(${t.id})" title="Edit">\u270E</button>
+        <button class="btn-icon" onclick="deleteMission(${t.id})" title="Delete">\u2421</button>
+      </div>`;
+      return `
+        <div class="mission-card scheduled priority-${t.priority}">
+          <div class="scheduled-clock">\u23F0</div>
+          <div class="mission-body">
+            <div class="mission-title">${esc(t.title)}</div>
+            ${t.description ? `<div class="mission-desc">${esc(t.description)}</div>` : ''}
+            <div class="mission-meta">
+              ${typeTag}
+              <span class="mission-tag scheduled-tag">SCHEDULED</span>
+              <span class="scheduled-window">${startLabel} \u2192 ${endLabel} &middot; ${durLabel}</span>
+              <span class="scheduled-timer" data-scheduled-timer="${t.id}">${remaining > 0 ? 'in ' + formatCountdown(remainingSec) : 'STARTING...'}</span>
+            </div>
+          </div>
+          ${actions}
+        </div>`;
+    }
+
     // ── Hold Directive card ─────────────────────────────────────────
     if (t.type === 'resistance') {
       const deadline = new Date(t.created_at + 'Z').getTime() + t.duration_minutes * 60000;
@@ -665,29 +724,50 @@ let editingTaskId = null;
 
 async function editMission(id) {
   const task = await api(`/tasks/${id}`);
-  if (!task || task.status !== 'active') return;
+  if (!task || (task.status !== 'active' && task.status !== 'scheduled')) return;
 
   editingTaskId = id;
   document.getElementById('input-title').value = task.title;
   document.getElementById('input-desc').value = task.description || '';
   document.getElementById('input-priority').value = task.priority;
   document.getElementById('input-category').value = task.category;
-
-  // Convert minutes back to readable duration
-  const mins = task.duration_minutes;
-  let durStr;
-  if (mins >= 10080 && mins % 10080 === 0) durStr = `${mins / 10080}w`;
-  else if (mins >= 1440 && mins % 1440 === 0) durStr = `${mins / 1440}d`;
-  else if (mins >= 60 && mins % 60 === 0) durStr = `${mins / 60}h`;
-  else if (mins >= 60) durStr = `${Math.floor(mins / 60)}h ${mins % 60}m`;
-  else durStr = `${mins}m`;
-  document.getElementById('input-duration').value = durStr;
   document.getElementById('input-territory').value = task.territory_id || '';
+
+  // Populate schedule fields if task was scheduled
+  if (task.scheduled_start) {
+    // Convert UTC to local datetime-local format
+    const startLocal = new Date(task.scheduled_start + 'Z');
+    document.getElementById('input-start').value = toDatetimeLocal(startLocal);
+    const endLocal = new Date(startLocal.getTime() + task.duration_minutes * 60000);
+    document.getElementById('input-end').value = toDatetimeLocal(endLocal);
+    document.getElementById('input-duration').value = '';
+  } else {
+    const mins = task.duration_minutes;
+    let durStr;
+    if (mins >= 10080 && mins % 10080 === 0) durStr = `${mins / 10080}w`;
+    else if (mins >= 1440 && mins % 1440 === 0) durStr = `${mins / 1440}d`;
+    else if (mins >= 60 && mins % 60 === 0) durStr = `${mins / 60}h`;
+    else if (mins >= 60) durStr = `${Math.floor(mins / 60)}h ${mins % 60}m`;
+    else durStr = `${mins}m`;
+    document.getElementById('input-duration').value = durStr;
+  }
+
+  // Set type toggle
+  const typeBtns = document.querySelectorAll('.type-btn');
+  typeBtns.forEach(b => b.classList.remove('active'));
+  const activeBtn = document.querySelector(`.type-btn[data-type="${task.type || 'mission'}"]`);
+  if (activeBtn) activeBtn.classList.add('active');
+  document.getElementById('input-type').value = task.type || 'mission';
 
   document.querySelector('#modal-new-mission .modal-title').textContent = 'EDIT MISSION';
   document.querySelector('#form-new-mission .btn-primary').textContent = 'UPDATE';
   document.getElementById('modal-new-mission').classList.add('open');
   document.getElementById('input-title').focus();
+}
+
+function toDatetimeLocal(date) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 // ── Delete (no consequences) ─────────────────────────────────────────
@@ -785,6 +865,44 @@ function initMissionForm() {
   const durInput = document.getElementById('input-duration');
   const typeInput = document.getElementById('input-type');
   const typeBtns = document.querySelectorAll('.type-btn');
+  const startInput = document.getElementById('input-start');
+  const endInput = document.getElementById('input-end');
+  const scheduleHint = document.getElementById('schedule-hint');
+  const durationLabel = document.getElementById('duration-label');
+
+  function updateScheduleHint() {
+    const startVal = startInput.value;
+    const endVal = endInput.value;
+    if (endVal) {
+      const startDate = startVal ? new Date(startVal) : new Date();
+      const endDate = new Date(endVal);
+      const diffMin = Math.round((endDate - startDate) / 60000);
+      if (diffMin <= 0) {
+        scheduleHint.textContent = 'End must be after start.';
+        scheduleHint.className = 'schedule-hint error';
+      } else {
+        const label = formatDurationLabel(diffMin);
+        const prefix = startVal && new Date(startVal) > new Date() ? 'Scheduled · ' : '';
+        scheduleHint.textContent = `${prefix}Duration: ${label}`;
+        scheduleHint.className = 'schedule-hint ok';
+      }
+      durationLabel.style.opacity = '0.4';
+      durationLabel.style.pointerEvents = 'none';
+    } else if (startVal && new Date(startVal) > new Date()) {
+      scheduleHint.textContent = 'Will be scheduled — starts at selected time.';
+      scheduleHint.className = 'schedule-hint ok';
+      durationLabel.style.opacity = '';
+      durationLabel.style.pointerEvents = '';
+    } else {
+      scheduleHint.textContent = '';
+      scheduleHint.className = 'schedule-hint';
+      durationLabel.style.opacity = '';
+      durationLabel.style.pointerEvents = '';
+    }
+  }
+
+  startInput.addEventListener('input', updateScheduleHint);
+  endInput.addEventListener('input', updateScheduleHint);
 
   // Type toggle
   typeBtns.forEach(btn => {
@@ -830,22 +948,44 @@ function initMissionForm() {
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const duration = parseDuration(durInput.value);
-    if (duration < 1) {
-      durInput.setCustomValidity('Enter a valid duration, e.g. 2h 30m, 45m, 1m');
-      durInput.reportValidity();
-      return;
+
+    const startVal = startInput.value;
+    const endVal = endInput.value;
+
+    let duration_minutes;
+    let scheduled_start = null;
+
+    if (endVal) {
+      const startDate = startVal ? new Date(startVal) : new Date();
+      const endDate = new Date(endVal);
+      duration_minutes = Math.round((endDate - startDate) / 60000);
+      if (duration_minutes < 1) {
+        endInput.setCustomValidity('End must be after start.');
+        endInput.reportValidity();
+        return;
+      }
+      endInput.setCustomValidity('');
+      if (startVal) scheduled_start = new Date(startVal).toISOString().slice(0, 19);
+    } else {
+      duration_minutes = parseDuration(durInput.value);
+      if (duration_minutes < 1) {
+        durInput.setCustomValidity('Enter a valid duration, e.g. 2h 30m, 45m, 1m');
+        durInput.reportValidity();
+        return;
+      }
+      durInput.setCustomValidity('');
+      if (startVal) scheduled_start = new Date(startVal).toISOString().slice(0, 19);
     }
-    durInput.setCustomValidity('');
 
     const data = {
       title: document.getElementById('input-title').value.trim(),
       description: document.getElementById('input-desc').value.trim(),
       priority: parseInt(document.getElementById('input-priority').value),
       category: document.getElementById('input-category').value,
-      duration_minutes: duration,
+      duration_minutes,
       territory_id: document.getElementById('input-territory').value || null,
       type: typeInput.value || 'mission',
+      scheduled_start,
     };
     if (!data.title) return;
 
@@ -874,6 +1014,12 @@ function resetFormMode() {
   typeBtns.forEach(b => b.classList.remove('active'));
   document.querySelector('.type-btn[data-type="mission"]').classList.add('active');
   document.getElementById('input-type').value = 'mission';
+  document.getElementById('input-start').value = '';
+  document.getElementById('input-end').value = '';
+  document.getElementById('schedule-hint').textContent = '';
+  document.getElementById('schedule-hint').className = 'schedule-hint';
+  document.getElementById('duration-label').style.opacity = '';
+  document.getElementById('duration-label').style.pointerEvents = '';
   document.querySelector('#modal-new-mission .modal-title').textContent = 'MISSION BRIEFING';
   document.querySelector('#form-new-mission .btn-primary').textContent = 'DEPLOY';
 }

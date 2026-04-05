@@ -84,6 +84,7 @@ try { db.exec("ALTER TABLE territories ADD COLUMN contested_by TEXT DEFAULT NULL
 try { db.exec("ALTER TABLE tasks ADD COLUMN type TEXT DEFAULT 'mission'"); } catch(e) {}
 try { db.exec("ALTER TABLE tasks ADD COLUMN hold_streak INTEGER DEFAULT 0"); } catch(e) {}
 try { db.exec("ALTER TABLE game_state ADD COLUMN iron_will_charges INTEGER DEFAULT 0"); } catch(e) {}
+try { db.exec("ALTER TABLE tasks ADD COLUMN scheduled_start TEXT DEFAULT NULL"); } catch(e) {}
 
 // Seed territories if empty
 const terCount = db.prepare('SELECT COUNT(*) as c FROM territories').get().c;
@@ -231,6 +232,7 @@ function getSoldierRankForXP(xp) {
 
 /** Calculate overtime status for a task */
 function getOvertimeInfo(task) {
+  if (task.status === 'scheduled') return { phase: 'scheduled', ratio: 0 };
   if (task.status !== 'active') return { phase: 'done', ratio: 0 };
   const elapsed = (Date.now() - new Date(task.created_at + 'Z').getTime()) / 60000;
   const dur = task.duration_minutes;
@@ -283,12 +285,15 @@ module.exports = {
 
   getAllTasks(status) {
     let tasks;
-    if (status) {
-      tasks = db.prepare('SELECT * FROM tasks WHERE status = ? ORDER BY status ASC, created_at DESC').all(status);
+    if (status === 'active') {
+      // Include scheduled tasks in the active view
+      tasks = db.prepare("SELECT * FROM tasks WHERE status IN ('active','scheduled') ORDER BY created_at ASC").all();
+    } else if (status) {
+      tasks = db.prepare('SELECT * FROM tasks WHERE status = ? ORDER BY created_at DESC').all(status);
     } else {
       tasks = db.prepare('SELECT * FROM tasks ORDER BY status ASC, created_at DESC').all();
     }
-    // Sort active tasks by nearest deadline (created_at + duration)
+    // Sort: active first (by nearest deadline), then scheduled (by scheduled_start)
     tasks.sort((a, b) => {
       if (a.status === 'active' && b.status === 'active') {
         const deadlineA = new Date(a.created_at + 'Z').getTime() + a.duration_minutes * 60000;
@@ -297,7 +302,8 @@ module.exports = {
       }
       if (a.status === 'active') return -1;
       if (b.status === 'active') return 1;
-      return 0;
+      // Both scheduled: sort by scheduled_start ascending
+      return new Date(a.scheduled_start + 'Z') - new Date(b.scheduled_start + 'Z');
     });
     return tasks.map(t => ({ ...t, overtime: getOvertimeInfo(t) }));
   },
@@ -308,11 +314,21 @@ module.exports = {
     return t;
   },
 
-  createTask({ title, description, priority, category, duration_minutes, territory_id, type }) {
+  createTask({ title, description, priority, category, duration_minutes, territory_id, type, scheduled_start }) {
     const taskType = type === 'resistance' ? 'resistance' : 'mission';
+    // If scheduled_start is provided and in the future, start as scheduled
+    let status = 'active';
+    let startVal = null;
+    if (scheduled_start) {
+      const startTime = new Date(scheduled_start + (scheduled_start.includes('Z') ? '' : 'Z'));
+      if (startTime > new Date()) {
+        status = 'scheduled';
+        startVal = scheduled_start.replace('Z', '');
+      }
+    }
     const result = db.prepare(
-      'INSERT INTO tasks (title, description, priority, category, duration_minutes, territory_id, type) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(title, description || '', priority || 2, category || 'combat', duration_minutes, territory_id || null, taskType);
+      'INSERT INTO tasks (title, description, priority, category, duration_minutes, territory_id, type, status, scheduled_start) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(title, description || '', priority || 2, category || 'combat', duration_minutes, territory_id || null, taskType, status, startVal);
     return this.getTask(result.lastInsertRowid);
   },
 
@@ -584,7 +600,7 @@ module.exports = {
 
   reactivateTask(id) {
     const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
-    if (!task || (task.status !== 'completed' && task.status !== 'abandoned')) return null;
+    if (!task || (task.status !== 'completed' && task.status !== 'abandoned') || task.status === 'scheduled') return null;
 
     const state = db.prepare('SELECT * FROM game_state WHERE id = 1').get();
     let detail;
@@ -959,8 +975,24 @@ module.exports = {
     // Territory tick: alien expansion, contested timeout, terror missions
     this.tickTerritories(hoursPassed);
 
+    // Promote scheduled tasks whose start time has arrived
+    this.promoteScheduledTasks();
+
     // Auto-resolve any Hold Directives that have elapsed
     this.resolveHoldDirectives();
+  },
+
+  promoteScheduledTasks() {
+    const due = db.prepare(
+      "SELECT * FROM tasks WHERE status = 'scheduled' AND scheduled_start <= datetime('now')"
+    ).all();
+    for (const task of due) {
+      db.prepare(
+        "UPDATE tasks SET status = 'active', created_at = scheduled_start WHERE id = ?"
+      ).run(task.id);
+      db.prepare('INSERT INTO events (type, title, detail) VALUES (?, ?, ?)')
+        .run('mission_start', `Mission Started: ${task.title}`, 'Scheduled start time reached');
+    }
   },
 
   // ── Base ──────────────────────────────────────────────────────────
