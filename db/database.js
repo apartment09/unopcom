@@ -85,6 +85,16 @@ try { db.exec("ALTER TABLE tasks ADD COLUMN type TEXT DEFAULT 'mission'"); } cat
 try { db.exec("ALTER TABLE tasks ADD COLUMN hold_streak INTEGER DEFAULT 0"); } catch(e) {}
 try { db.exec("ALTER TABLE game_state ADD COLUMN iron_will_charges INTEGER DEFAULT 0"); } catch(e) {}
 try { db.exec("ALTER TABLE tasks ADD COLUMN scheduled_start TEXT DEFAULT NULL"); } catch(e) {}
+try { db.exec(`
+  CREATE TABLE IF NOT EXISTS subtasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    completed INTEGER DEFAULT 0,
+    sort_order INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+  )
+`); } catch(e) {}
 
 // Seed territories if empty
 const terCount = db.prepare('SELECT COUNT(*) as c FROM territories').get().c;
@@ -305,13 +315,40 @@ module.exports = {
       // Both scheduled: sort by scheduled_start ascending
       return new Date(a.scheduled_start + 'Z') - new Date(b.scheduled_start + 'Z');
     });
-    return tasks.map(t => ({ ...t, overtime: getOvertimeInfo(t) }));
+    const ids = tasks.map(t => t.id);
+    const allSubs = ids.length
+      ? db.prepare(`SELECT * FROM subtasks WHERE task_id IN (${ids.map(() => '?').join(',')}) ORDER BY sort_order, id`).all(...ids)
+      : [];
+    const subsByTask = {};
+    for (const s of allSubs) {
+      (subsByTask[s.task_id] ||= []).push(s);
+    }
+    return tasks.map(t => ({ ...t, overtime: getOvertimeInfo(t), subtasks: subsByTask[t.id] || [] }));
   },
 
   getTask(id) {
     const t = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
-    if (t) t.overtime = getOvertimeInfo(t);
+    if (!t) return null;
+    t.overtime = getOvertimeInfo(t);
+    t.subtasks = db.prepare('SELECT * FROM subtasks WHERE task_id = ? ORDER BY sort_order, id').all(t.id);
     return t;
+  },
+
+  // ── Subtasks ──────────────────────────────────────────────────────
+
+  addSubtask(taskId, title) {
+    const order = (db.prepare('SELECT MAX(sort_order) as m FROM subtasks WHERE task_id = ?').get(taskId)?.m ?? -1) + 1;
+    const info = db.prepare('INSERT INTO subtasks (task_id, title, sort_order) VALUES (?, ?, ?)').run(taskId, title.trim(), order);
+    return db.prepare('SELECT * FROM subtasks WHERE id = ?').get(info.lastInsertRowid);
+  },
+
+  toggleSubtask(id) {
+    db.prepare('UPDATE subtasks SET completed = 1 - completed WHERE id = ?').run(id);
+    return db.prepare('SELECT * FROM subtasks WHERE id = ?').get(id);
+  },
+
+  deleteSubtask(id) {
+    db.prepare('DELETE FROM subtasks WHERE id = ?').run(id);
   },
 
   createTask({ title, description, priority, category, duration_minutes, territory_id, type, scheduled_start }) {

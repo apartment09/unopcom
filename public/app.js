@@ -20,6 +20,8 @@ let currentFilter = 'active';
 let gameState = {};
 let cachedTasks = [];  // cached for client-side timer updates
 const _phaseHistory = new Map(); // taskId → last-seen phase (for notification transitions)
+let _draftSubtasks = []; // client-side subtask drafts while form is open (new tasks)
+let _editSubtasks = [];  // existing subtasks while editing (ids known)
 
 // ── API ──────────────────────────────────────────────────────────────
 
@@ -428,6 +430,45 @@ function updateDashboard() {
 
 // ── Mission List ─────────────────────────────────────────────────────
 
+// ── Subtasks ──────────────────────────────────────────────────────────
+
+function subtaskLabel(type) {
+  return type === 'resistance' ? 'PROTOCOLS' : 'OBJECTIVES';
+}
+
+function renderSubtaskList(task) {
+  const subs = task.subtasks;
+  if (!subs?.length) return '';
+  const done = subs.filter(s => s.completed).length;
+  const label = subtaskLabel(task.type);
+  const isActive = task.status === 'active';
+  const items = subs.map(s => `
+    <div class="subtask-item${s.completed ? ' done' : ''}" id="subtask-${s.id}">
+      <button class="subtask-check" ${isActive ? `onclick="toggleSubtask(${task.id},${s.id})"` : 'disabled'}
+        title="${s.completed ? 'Mark incomplete' : 'Mark complete'}">
+        ${s.completed ? '&#10003;' : ''}
+      </button>
+      <span class="subtask-title">${esc(s.title)}</span>
+    </div>`).join('');
+  return `
+    <div class="subtask-list">
+      <div class="subtask-list-header">${label} <span class="subtask-progress">${done}/${subs.length}</span></div>
+      ${items}
+    </div>`;
+}
+
+async function toggleSubtask(taskId, subtaskId) {
+  const el = document.getElementById(`subtask-${subtaskId}`);
+  if (el) el.classList.toggle('done'); // optimistic
+  await api(`/tasks/${taskId}/subtasks/${subtaskId}`, { method: 'PATCH' });
+  // Update cachedTasks so timer tick stays consistent
+  const task = cachedTasks.find(t => t.id === taskId);
+  if (task) {
+    const sub = task.subtasks?.find(s => s.id === subtaskId);
+    if (sub) sub.completed = 1 - sub.completed;
+  }
+}
+
 async function renderTaskList(containerId, status, compact) {
   const tasks = await api(`/tasks${status ? `?status=${status}` : ''}`);
   const el = document.getElementById(containerId);
@@ -566,12 +607,14 @@ async function renderTaskList(containerId, status, compact) {
       }
     }
 
+    const subtasksHtml = renderSubtaskList(t);
     return `
       <div class="${classes}">
         <button class="mission-check" ${checkDisabled} onclick="completeMission(${t.id})">${checkContent}</button>
         <div class="mission-body">
           <div class="mission-title">${esc(t.title)}</div>
           ${t.description ? `<div class="mission-desc">${esc(t.description)}</div>` : ''}
+          ${subtasksHtml}
           <div class="mission-meta">${meta}</div>
         </div>
         ${actions}
@@ -761,6 +804,17 @@ async function editMission(id) {
 
   document.querySelector('#modal-new-mission .modal-title').textContent = 'EDIT MISSION';
   document.querySelector('#form-new-mission .btn-primary').textContent = 'UPDATE';
+
+  // Load existing subtasks
+  _editSubtasks = task.subtasks ? [...task.subtasks] : [];
+  document.getElementById('subtask-form-label').textContent = subtaskLabel(task.type);
+  document.getElementById('input-subtask').placeholder = task.type === 'resistance' ? 'Add protocol...' : 'Add objective...';
+  document.getElementById('subtask-form-list').innerHTML = _editSubtasks.map(s => `
+    <div class="subtask-form-item">
+      <span class="subtask-form-title">${esc(s.title)}</span>
+      <button type="button" class="subtask-form-remove" onclick="removeFormSubtask(${s.id})">\u00D7</button>
+    </div>`).join('');
+
   document.getElementById('modal-new-mission').classList.add('open');
   document.getElementById('input-title').focus();
 }
@@ -913,7 +967,38 @@ function initMissionForm() {
       const isResistance = btn.dataset.type === 'resistance';
       modal.querySelector('.modal-title').textContent = isResistance ? 'HOLD DIRECTIVE' : 'MISSION BRIEFING';
       form.querySelector('.btn-primary').textContent = isResistance ? 'ACTIVATE' : 'DEPLOY';
+      document.getElementById('subtask-form-label').textContent = subtaskLabel(btn.dataset.type);
+      document.getElementById('input-subtask').placeholder = isResistance ? 'Add protocol...' : 'Add objective...';
     });
+  });
+
+  // Subtask form management
+  function renderFormSubtasks() {
+    const list = document.getElementById('subtask-form-list');
+    const items = (editingTaskId ? _editSubtasks : _draftSubtasks);
+    list.innerHTML = items.map((s, i) => `
+      <div class="subtask-form-item">
+        <span class="subtask-form-title">${esc(s.title)}</span>
+        <button type="button" class="subtask-form-remove" onclick="removeFormSubtask(${editingTaskId ? s.id : i})">\u00D7</button>
+      </div>`).join('');
+  }
+
+  document.getElementById('btn-add-subtask').addEventListener('click', async () => {
+    const inp = document.getElementById('input-subtask');
+    const title = inp.value.trim();
+    if (!title) return;
+    if (editingTaskId) {
+      const s = await api(`/tasks/${editingTaskId}/subtasks`, { method: 'POST', body: JSON.stringify({ title }) });
+      _editSubtasks.push(s);
+    } else {
+      _draftSubtasks.push({ title });
+    }
+    inp.value = '';
+    renderFormSubtasks();
+  });
+
+  document.getElementById('input-subtask').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btn-add-subtask').click(); }
   });
 
   document.getElementById('btn-new-mission').addEventListener('click', () => {
@@ -991,9 +1076,16 @@ function initMissionForm() {
 
     if (editingTaskId) {
       await api(`/tasks/${editingTaskId}`, { method: 'PATCH', body: data });
+      // _editSubtasks already saved in real-time; nothing extra to do
     } else {
-      await api('/tasks', { method: 'POST', body: data });
+      const created = await api('/tasks', { method: 'POST', body: data });
+      // Flush draft subtasks
+      for (const s of _draftSubtasks) {
+        await api(`/tasks/${created.id}/subtasks`, { method: 'POST', body: JSON.stringify({ title: s.title }) });
+      }
     }
+    _draftSubtasks = [];
+    _editSubtasks = [];
     modal.classList.remove('open');
     form.reset();
     durInput.value = '2h';
@@ -1022,6 +1114,26 @@ function resetFormMode() {
   document.getElementById('duration-label').style.pointerEvents = '';
   document.querySelector('#modal-new-mission .modal-title').textContent = 'MISSION BRIEFING';
   document.querySelector('#form-new-mission .btn-primary').textContent = 'DEPLOY';
+  document.getElementById('subtask-form-label').textContent = 'OBJECTIVES';
+  document.getElementById('input-subtask').placeholder = 'Add objective...';
+  document.getElementById('subtask-form-list').innerHTML = '';
+  _draftSubtasks = [];
+  _editSubtasks = [];
+}
+
+async function removeFormSubtask(idOrIndex) {
+  if (editingTaskId) {
+    await api(`/tasks/${editingTaskId}/subtasks/${idOrIndex}`, { method: 'DELETE' });
+    _editSubtasks = _editSubtasks.filter(s => s.id !== idOrIndex);
+  } else {
+    _draftSubtasks.splice(idOrIndex, 1);
+  }
+  document.getElementById('subtask-form-list').innerHTML = (editingTaskId ? _editSubtasks : _draftSubtasks)
+    .map((s, i) => `
+      <div class="subtask-form-item">
+        <span class="subtask-form-title">${esc(s.title)}</span>
+        <button type="button" class="subtask-form-remove" onclick="removeFormSubtask(${editingTaskId ? s.id : i})">\u00D7</button>
+      </div>`).join('');
 }
 
 // ── Shop ─────────────────────────────────────────────────────────────

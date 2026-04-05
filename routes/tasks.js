@@ -57,4 +57,21 @@ router.delete('/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Subtasks ──────────────────────────────────────────────────────────
+
+router.post('/:id/subtasks', (req, res) => {
+  const { title } = req.body;
+  if (!title?.trim()) return res.status(400).json({ error: 'Title required' });
+  res.status(201).json(db.addSubtask(req.params.id, title));
+});
+
+router.patch('/:id/subtasks/:sid', (req, res) => {
+  res.json(db.toggleSubtask(req.params.sid));
+});
+
+router.delete('/:id/subtasks/:sid', (req, res) => {
+  db.deleteSubtask(req.params.sid);
+  res.json({ ok: true });
+});
+
 module.exports = router;
